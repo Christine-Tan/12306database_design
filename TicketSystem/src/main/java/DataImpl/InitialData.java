@@ -260,11 +260,22 @@ public class InitialData {
 
     public void initialRemainTicket(){
         try {
+            ResultSet rs;
             Statement statement=connection.createStatement();
-            String sql="SELECT seat_quantity FROM carriage WHERE ";
-            
+            String sql="SELECT seat_quantity FROM carriage";
+            rs=statement.executeQuery(sql);
+            rs.next();
+            int business_seat=rs.getInt("seat_quantity");
+            rs.next();
+            int first_seat=rs.getInt("seat_quantity");
+            rs.next();
+            int second_seat=rs.getInt("seat_quantity");
+            rs.next();
+            int no_seat=rs.getInt("seat_quantity");
+
             sql="SELECT date,train_num,business_num,first_num,second_num FROM train";
-            ResultSet rs=statement.executeQuery(sql);
+            rs=statement.executeQuery(sql);
+
             while(rs.next()){
                 //取出列车字段信息
                 String date=rs.getString("date");
@@ -273,13 +284,35 @@ public class InitialData {
                 int first_num=rs.getInt("first_num");
                 int second_num=rs.getInt("second_num");
                 //计算每种座位类型的个数
-
-
+                int business_remain=business_seat*business_num;
+                int first_remain=first_seat*first_num;
+                int second_remain=second_seat*second_num;
+                int noSeat_remain=no_seat*second_num;
+                Statement statement1=connection.createStatement();
+                sql="SELECT station_name FROM route WHERE train_num="+train_num;
+                ResultSet re=statement1.executeQuery(sql);
+                List<String> stations=new ArrayList<String>();
+                while (re.next()){
+                    stations.add(re.getString("station_name"));
+                }
+                //该车次对应的所有站名
+                for(int i=0;i<stations.size();i++){
+                    for(int j=0;j<stations.size();j++){
+                        if(i!=j){
+                            String departure=stations.get(i);
+                            String destination=stations.get(j);
+                            sql="INSERT INTO remain_ticket(date,train_num,departure,destination,business_remain,first_remain,second_remain,noSeat_remain) VALUES("
+                                    +"\""+date+"\",\""+train_num+"\",\""+departure+"\",\""+destination+"\",\""
+                                    +business_remain+"\",\""+first_remain+"\",\""+second_remain+"\",\""+noSeat_remain+"\")";
+                            statement1.execute(sql);
+                        }
+                    }
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-
+        System.out.println("Initial remain_ticket Successfully!");
     }
 
     public static void main(String[] args) throws SQLException, ClassNotFoundException {
@@ -294,6 +327,6 @@ public class InitialData {
 //        initialData.initialTicketPrice();
 //        initialData.initialUser();
 //        initialData.initialTrain();
-        initialData.initialRemainTicket();
+//        initialData.initialRemainTicket();
     }
 }
