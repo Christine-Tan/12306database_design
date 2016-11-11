@@ -2,8 +2,13 @@ package DataImpl;
 
 import PO.FrequencyPO;
 import PO.RemainTicketPO;
+import PO.TicketPO;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,7 +19,6 @@ public class PurchaseTicketImpl {
     private Connection connection;
     private List<FrequencyPO> frequencyPOList;
     private RemainTicketPO remainTicketPO;
-
     public PurchaseTicketImpl(Connection connection){
         this.connection=connection;
 
@@ -105,45 +109,204 @@ public class PurchaseTicketImpl {
             //查找所有目的地或始发地包含在始发站和目的站之间的站，destination为目的地，departure为出发地
             //对应座位类型下的剩余票数
             //去重
-            String sql="SELECT rt.id,rt."+seat_type+
-                    " FROM (SELECT id,departure,destination," +seat_type+
-                    " FROM remain_ticket WHERE train_num=" +
-                    train_num + " AND date=\""+date +
-                    "\") rt, (SELECT DISTINCT r2.station_name,r2.station_num FROM route r1,route r2,route r3 " +
-                    "WHERE r1.train_num=r2.train_num AND r1.train_num=r3.train_num AND r1.train_num=" +
-                    train_num + " AND r1.station_name=\""+departure+"\" AND r2.station_num>r1.station_num AND r3.station_name=\"" +
-                    destination+"\" AND r2.station_num<r3.station_num) r WHERE rt.departure=r.station_name OR rt.destination=r.station_name OR rt.departure=\"" +
-                    departure+"\" OR rt.destination=\"" +
-                    destination+"\" FOR UPDATE;";
-//            System.out.println(sql);
+            String sql="SELECT id,"+seat_type +
+                    " FROM remain_ticket rt" +
+                    " WHERE rt.train_num="+train_num+" AND date=\""+date+"\" AND rt.departure_num<(SELECT station_num" +
+                    " FROM route" +
+                    " WHERE train_num="+train_num+" AND station_name=\""+destination+"\")" +
+                    " AND rt.destination_num>(SELECT station_num" +
+                    " FROM route" +
+                    " WHERE station_name=\""+departure+"\" AND train_num="+train_num+");";
+            System.out.println(sql);
             ResultSet rs=statement.executeQuery(sql);
             while (rs.next()){
-                if(rs.getInt("rt.second_remain")<=0){
+                if(rs.getInt(seat_type)<=0){
+                    System.out.println(rs.getInt("id"));
                     ids.clear();
                     break;
                 }else{
-                    ids.add(rs.getInt("rt.id"));
+                    ids.add(rs.getInt("id"));
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-//        System.out.println(ids.size());
         return ids;
     }
 
     /**
-     * 根据seat_type返回在remain_tickets中的对应字段名
+     * 购票流程，若成功，则将该票相关信息打印并持久化保存，若失败则告知用户购票失败
+     * @param identity_num
      * @param seat_type
-     * @return
+     * @param date
+     * @param train_num
+     * @param departure
+     * @param destination
      */
-    public String[] getSeatType(String seat_type){
-        int seat_type_num=0;
-        String seatRemainType;
-        String seatName;
+    public void purchaseTicket(String identity_num,String seat_type,String date,int train_num,String departure,String destination){
+        List<Integer> ids;
+        boolean flag=true;
         try {
             Statement statement=connection.createStatement();
-            String sql="SELECT type FROM carriage WHERE name=\""+seat_type+"\"";
+            String work="SET AUTOCOMMIT=0;";
+            statement.execute(work);
+            work="BEGIN WORK;";
+            statement.execute(work);
+            int seat_type_num=this.getSeatType(seat_type);
+            String seatRemain_name=this.getSeatTypeName(seat_type)[0];
+            String seatNum_name=this.getSeatTypeName(seat_type)[1];
+            //事务开始
+            //加锁
+            if((ids=this.ticketAvailable(date,train_num,departure,destination,seatRemain_name)).size()>0){
+                //更新对应表项
+                System.out.println("Tickets are Available!");
+                for(int id:ids) {
+                    String update = "UPDATE remain_ticket SET "+seatRemain_name+"="+seatRemain_name+"-1"+ " WHERE id=" + id;
+                    statement.execute(update);
+                    update = "UPDATE remain_ticket SET "+seatNum_name+"="+seatNum_name+"+1"+ " WHERE id=" + id;
+                    statement.execute(update);
+                }
+                work="COMMIT WORK;";
+                statement.execute(work);
+            }else{
+                flag=false;
+                System.out.println("Tickets are NOT Available!");
+            }
+
+
+            if(flag) {
+                //购票成功
+                System.out.println("Purchase Ticket Successfully!");
+                ResultSet rs;
+                //获得列车出发时间
+                String departure_time="";
+                String departure_sql="SELECT departure_time FROM timetable WHERE train_num="+train_num+
+                        " AND station_name=\""+departure+"\";";
+                rs=statement.executeQuery(departure_sql);
+                if(rs.next()){
+                    departure_time=rs.getString("departure_time");
+                }
+                //获得每公里票价
+                double per=0;
+                String price_sql="SELECT price FROM ticket_price WHERE type="+seat_type_num;
+                rs=statement.executeQuery(price_sql);
+                if(rs.next()){
+                    per=rs.getDouble("price");
+                }
+                //获得里程数
+                int distance=0;
+                String sql= "SELECT t.distance FROM timetable t " +
+                                "WHERE t.train_num=16 AND (t.station_name=\"" +
+                                departure +
+                                "\" OR t.station_name=\"" +
+                                destination+"\") ORDER BY t.station_num";
+                rs=statement.executeQuery(sql);
+                if(rs.next()){
+                    int d1=rs.getInt("t.distance");
+                    if(rs.next()){
+                        int d2=rs.getInt("t.distance");
+                        distance=Math.abs(d2-d1);
+                    }
+                }
+                //计算票价
+                DecimalFormat df=new DecimalFormat("0.00");
+                double price=Double.valueOf(df.format(per*distance));
+
+                //自动分配座位
+                //计算车厢号
+                int carriage_number=0;
+                String train_sql="SELECT business_num,first_num " +
+                        "FROM train " +
+                        "WHERE date=\""+date+"\" AND train_num="+train_num+";";
+                rs=statement.executeQuery(train_sql);
+                if(rs.next()){
+                    int business_carriage_num=rs.getInt("business_num");
+                    int first_carriage_num=rs.getInt("first_num");
+                    switch (seat_type_num){
+                        case 1:
+                            carriage_number=1;
+                            break;
+                        case 2:
+                            carriage_number=business_carriage_num+1;
+                            break;
+                        case 3:
+                            carriage_number=business_carriage_num+first_carriage_num+1;
+                            break;
+                        case 4:
+                            carriage_number=business_carriage_num+first_carriage_num+1;
+                            break;
+                    }
+                }
+                //计算座位号
+                int seat_num=1;
+                String seat_sql= "SELECT "+seatNum_name +
+                        " FROM remain_ticket WHERE date=\"" +
+                        date+"\" AND train_num=" +
+                        train_num+" AND departure=\"" +
+                        departure+"\" AND destination=\"" +
+                        destination+"\"";
+                rs=statement.executeQuery(seat_sql);
+                if(rs.next()){
+                    seat_num=rs.getInt(seatNum_name);
+                }
+
+                int row=0;
+                String seat_number="";
+                int per_carriage=1;
+                if(carriage_number>0){
+                    String carriage_sql="SELECT seat_quantity FROM carriage WHERE name=\""+seat_type+"\";";
+                    rs=statement.executeQuery(carriage_sql);
+                    if(rs.next()){
+                        per_carriage=rs.getInt("seat_quantity");
+                    }
+                    carriage_number=carriage_number+seat_num/per_carriage;
+                    seat_num=seat_num % per_carriage;
+                    if(seat_num==0){
+                        seat_num=per_carriage;
+                    }
+                    seat_sql="SELECT row_number,seat_number " +
+                            "FROM "+ seatNum_name +
+                            " WHERE id="+seat_num+";";
+                    rs=statement.executeQuery(seat_sql);
+                    if(rs.next()) {
+                        row = rs.getInt("row_number");
+                    }
+                    seat_number=rs.getString("seat_number");
+                }
+
+                String user_sql="SELECT id FROM user WHERE identity_num=\""+identity_num+"\";";
+                rs=statement.executeQuery(user_sql);
+                int user_id=0;
+                if(rs.next()){
+                    user_id=rs.getInt("id");
+                }
+
+                String ticket_sql="INSERT INTO ticket(user_id,seat_type,`date`,train_num,departure_time,departure," +
+                        "destination,ticket_price,row,seatNum) VALUES("+user_id+","+seat_type_num+",'"+date+"',"+train_num+",'"
+                        +departure_time+"','"+departure+"','"+destination+"',"+price+","+row+",'"+seat_number+"');";
+//                System.out.println(ticket_sql);
+                statement.execute(ticket_sql);
+
+                TicketPO ticketPO=new TicketPO(seat_type,date,train_num,departure_time,
+                        departure,destination,price,carriage_number,row,seat_number);
+                System.out.println(ticketPO.toString());
+
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 获得车厢类型对应的id
+     * @param seat_name
+     * @return
+     */
+    public int getSeatType(String seat_name){
+        int seat_type_num=0;
+        try {
+            Statement statement=connection.createStatement();
+            String sql="SELECT type FROM carriage WHERE name=\""+seat_name+"\"";
             ResultSet rs=statement.executeQuery(sql);
             if(rs.next()){
                 seat_type_num=rs.getInt("type");
@@ -151,6 +314,19 @@ public class PurchaseTicketImpl {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return seat_type_num;
+    }
+
+
+    /**
+     * 根据seat_type返回在remain_tickets中的对应字段名
+     * @param seat_type
+     * @return
+     */
+    public String[] getSeatTypeName(String seat_type){
+        int seat_type_num=this.getSeatType(seat_type);
+        String seatRemainType;
+        String seatName;
         switch (seat_type_num){
             case 1:
                 seatRemainType="business_remain";
@@ -177,49 +353,4 @@ public class PurchaseTicketImpl {
         return seatIndex;
     }
 
-    /**
-     * 购票流程，若成功，则将该票相关信息打印并持久化保存，若失败则告知用户购票失败
-     * @param identity_num
-     * @param seat_type
-     * @param date
-     * @param train_num
-     * @param departure
-     * @param destination
-     */
-    public void purchaseTicket(String identity_num,String seat_type,String date,int train_num,
-                               String departure,String destination){
-        List<Integer> ids=new ArrayList<Integer>();
-        try {
-            Statement statement=connection.createStatement();
-            String work="SET AUTOCOMMIT=0;";
-            statement.execute(work);
-            work="BEGIN WORK;";
-            statement.execute(work);
-            String seatRemain_name=this.getSeatType(seat_type)[0];
-            String seatNum_name=this.getSeatType(seat_type)[1];
-            //事务开始
-            //加锁
-            if((ids=this.ticketAvailable(date,train_num,departure,destination,seatRemain_name)).size()>0){
-                //更新对应表项
-                System.out.println("Tickets Available!");
-                for(int id:ids) {
-                    String update = "UPDATE remain_ticket SET "+seatRemain_name+"="+seatRemain_name+"-1"+ " WHERE id=" + id;
-//                    System.out.println(update);
-                    statement.execute(update);
-                    update = "UPDATE remain_ticket SET "+seatNum_name+"="+seatNum_name+"+1"+ " WHERE id=" + id;
-                    statement.execute(update);
-                }
-            }else{
-                System.out.println("Tickets NOT Available!");
-            }
-            work="COMMIT WORK;";
-            statement.execute(work);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        //出票
-        //计算座位、票价
-
-        System.out.println("Purchase TicketPO Successfully!");
-    }
 }

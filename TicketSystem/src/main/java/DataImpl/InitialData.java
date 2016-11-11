@@ -120,7 +120,7 @@ public class InitialData {
                 for (int j = 1; j <= 3; j++) {
                     int row_number = i;
                     String seatNumber = SeatNumber.getNumber(j);
-                    sql = "INSERT INTO seat_business(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
+                    sql = "INSERT INTO business_seat(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
 //                    System.out.println(sql);
                     statement.execute(sql);
                 }
@@ -140,7 +140,7 @@ public class InitialData {
                 for (int j = 1; j <= 4; j++) {
                     int row_number = i;
                     String seatNumber = SeatNumber.getNumber(j);
-                    sql = "INSERT INTO seat_first(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
+                    sql = "INSERT INTO first_seat(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
 //                    System.out.println(sql);
                     statement.execute(sql);
                 }
@@ -161,7 +161,7 @@ public class InitialData {
                 for (int j = 1; j <= 5; j++) {
                     int row_number = i;
                     String seatNumber = SeatNumber.getNumber(j);
-                    sql = "INSERT INTO seat_second(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
+                    sql = "INSERT INTO second_seat(row_number,seat_number) VALUES(" + "\"" + row_number + "\",\"" + seatNumber + "\")";
 //                    System.out.println(sql);
                     statement.execute(sql);
                 }
@@ -288,20 +288,26 @@ public class InitialData {
                 int second_remain = second_seat * second_num;
                 int noSeat_remain = no_seat * second_num;
                 Statement statement1 = connection.createStatement();
-                sql = "SELECT station_name FROM route WHERE train_num=" + train_num;
+                sql = "SELECT station_name,station_num FROM route WHERE train_num=" + train_num;
                 ResultSet re = statement1.executeQuery(sql);
-                List<String> stations = new ArrayList<String>();
+                List<String> station_name = new ArrayList<String>();
+                List<Integer> station_num=new ArrayList<Integer>();
                 while (re.next()) {
-                    stations.add(re.getString("station_name"));
+                    System.out.println(re.getString("station_name"));
+                    station_name.add(re.getString("station_name"));
+                    station_num.add(re.getInt("station_num"));
                 }
                 //该车次对应的所有站名
-                for (int i = 0; i < stations.size(); i++) {
-                    for (int j = i+1; j < stations.size(); j++) {
-                            String departure = stations.get(i);
-                            String destination = stations.get(j);
-                            sql = "INSERT INTO remain_ticket(date,train_num,departure,destination,business_remain,first_remain,second_remain,noSeat_remain) VALUES("
-                                    + "\"" + date + "\",\"" + train_num + "\",\"" + departure + "\",\"" + destination + "\",\""
-                                    + business_remain + "\",\"" + first_remain + "\",\"" + second_remain + "\",\"" + noSeat_remain + "\")";
+                for (int i = 0; i < station_name.size(); i++) {
+                    for (int j = i+1; j < station_name.size(); j++) {
+                            String departure = station_name.get(i);
+                            String destination = station_name.get(j);
+                            int departure_num=station_num.get(i);
+                            int destination_num=station_num.get(j);
+                            sql = "INSERT INTO remain_ticket(date,train_num,departure,destination,departure_num,destination_num,business_remain,first_remain,second_remain,noSeat_remain) " +
+                                    "VALUES(" + "'" + date + "'," + train_num + ",'" + departure + "','" + destination + "',"
+                                    +departure_num+","+destination_num+","+ business_remain + "," + first_remain + "," + second_remain + "," + noSeat_remain + ")";
+//                            System.out.println(sql);
                             statement1.execute(sql);
 
                     }

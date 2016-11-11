@@ -34,10 +34,10 @@ public class Main {
         Main main=new Main();
 //        main.initialTables(connection);
         PurchaseTicketImpl purchaseTicket=new PurchaseTicketImpl(connection);
-//        purchaseTicket.getFrequency("2016-11-09","南京南","北京南");
-//        purchaseTicket.getRemainTicket("2016-11-09",16,"南京南","北京南");
-//        purchaseTicket.ticketAvailable("2016-11-09",16,"南京南","北京南","二等座");
-        purchaseTicket.purchaseTicket("420602199605162024","二等座","2016-11-09",16,"南京南","北京南");
+//        purchaseTicket.getFrequency("2016-11-09","南京南","济南西");
+//        purchaseTicket.getRemainTicket("2016-11-09",16,"南京南","济南西");
+//        purchaseTicket.ticketAvailable("2016-11-09",16,"南京南","济南西","second_remain");
+        purchaseTicket.purchaseTicket("420602199605162024","二等座","2016-11-11",16,"南京南","北京南");
     }
 
 }
