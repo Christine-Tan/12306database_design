@@ -14,12 +14,21 @@ public class DBConnector {
     String user_name="root";
     String password="123456";
 
-    public Connection getMySqlConnection() throws ClassNotFoundException, SQLException {
+    public Connection getMySqlConnection() {
+        Connection connection=null;
         String url="jdbc:mysql://"+mysqlIP+"/"+database+"?user="+user_name
                 +"&password="+password+"&useUnicode=true&characterEncoding=utf8&useSSL=false";
-        Class.forName("com.mysql.cj.jdbc.Driver");
-        Connection connection= DriverManager.getConnection(url);
-        System.out.println("Connect to database successfully!");
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            connection= DriverManager.getConnection(url);
+            System.out.println("Connect to database successfully!");
+        } catch (ClassNotFoundException e) {
+            System.out.println("Connect to database failed!");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            System.out.println("Connect to database failed!");
+            e.printStackTrace();
+        }
         return connection;
     }
 

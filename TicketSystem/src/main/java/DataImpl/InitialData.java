@@ -16,8 +16,8 @@ import java.util.Date;
 public class InitialData {
     Connection connection;
 
-    public void initial(Connection connection) throws SQLException, ClassNotFoundException {
-        this.connection =connection;
+    public InitialData(Connection connection){
+        this.connection=connection;
     }
 
     public BufferedReader readFromTXT(String fileRoute) {
@@ -82,7 +82,7 @@ public class InitialData {
                     }
                     String sql = "INSERT INTO timetable(train_num,station_name,station_num,arrive_time,departure_time,distance) VALUES (\""
                             + train_num + "\",\"" + station_name + "\",\"" + station_num + "\",\"" + arrive_time + "\",\"" + departure_time + "\",\"" + distance + "\");";
-                    System.out.println(sql);
+//                    System.out.println(sql);
                     Statement statement = connection.createStatement();
                     statement.execute(sql);
                 }
@@ -293,7 +293,7 @@ public class InitialData {
                 List<String> station_name = new ArrayList<String>();
                 List<Integer> station_num=new ArrayList<Integer>();
                 while (re.next()) {
-                    System.out.println(re.getString("station_name"));
+//                    System.out.println(re.getString("station_name"));
                     station_name.add(re.getString("station_name"));
                     station_num.add(re.getInt("station_num"));
                 }
